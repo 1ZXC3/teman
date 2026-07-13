@@ -2,7 +2,7 @@ import os
 from pathlib import Path
 
 # ========== 项目路径 ==========
-BASE_DIR = Path(__file__).resolve().parent.parent
+BASE_DIR = Path(__file__).resolve().parent.parent.parent  # config.py 在 app/core/ 下，往上3层到项目根
 DATA_DIR = BASE_DIR / "data"
 UPLOAD_DIR = BASE_DIR / "uploads"
 
