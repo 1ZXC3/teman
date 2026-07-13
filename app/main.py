@@ -18,17 +18,19 @@ STATIC_DIR.mkdir(exist_ok=True)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """启动时自动创建数据库表"""
+    """启动时自动创建数据库表并预加载AI模型"""
     Base.metadata.create_all(bind=engine)
     print("=" * 50)
-    print("📚 我的知识助手 启动成功！")
+    print("  我的知识助手 启动中...")
     print("=" * 50)
-    print(f"🌐 打开浏览器访问: http://localhost:8000")
-    print(f"📁 数据存储位置: {DATA_DIR}")
-    print(f"📄 上传文件目录: {Path.cwd() / 'uploads'}")
+
+    # 预加载模型（首次需下载 ~100MB，之后秒启动）
+    from app.services.embedding_service import embedding_service
+    embedding_service.preload()
+
     print("-" * 50)
-    print("💡 提示: 没有 API Key 也能用本地搜索模式！")
-    print("   如果要用 AI 总结功能，请设置环境变量 LLM_API_KEY")
+    print("  浏览器访问: http://localhost:8000")
+    print("  DeepSeek AI 已就绪")
     print("=" * 50)
     yield
     engine.dispose()

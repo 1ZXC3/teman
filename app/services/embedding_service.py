@@ -1,3 +1,4 @@
+import os
 import threading
 from typing import List
 import chromadb
@@ -5,36 +6,40 @@ from chromadb.config import Settings as ChromaSettings
 from sentence_transformers import SentenceTransformer
 from app.core.config import CHROMA_DIR, COLLECTION_NAME, EMBEDDING_MODEL, EMBEDDING_DEVICE
 
+# 国内加速：使用 HF 镜像站
+if not os.getenv("HF_ENDPOINT"):
+    os.environ["HF_ENDPOINT"] = "https://hf-mirror.com"
+
 
 class EmbeddingService:
-    """
-    向量服务 - 把文字变成数字指纹，方便搜索
-    使用 ChromaDB 内置数据库
-    """
+    """向量服务 - 把文字变成数字指纹，方便搜索"""
 
     def __init__(self):
         self._model = None
         self._client = None
         self._lock = threading.Lock()
 
-    @property
-    def model(self):
+    def preload(self):
+        """启动时预加载模型，避免首次请求卡住"""
+        print("正在下载/加载AI模型... (首次约1-2分钟)")
+        self._get_model()
+        print("模型就绪!")
+
+    def _get_model(self):
         if self._model is None:
-            print("正在加载AI模型...")
             self._model = SentenceTransformer(EMBEDDING_MODEL, device=EMBEDDING_DEVICE)
-            print("模型加载完成!")
         return self._model
 
-    def _get_client(self):
-        """获取 ChromaDB 客户端，每次新建确保连接有效"""
-        return chromadb.PersistentClient(
+    def encode(self, texts, **kwargs):
+        with self._lock:
+            return self._get_model().encode(texts, **kwargs)
+
+    def _get_collection(self):
+        """每次新建客户端连接"""
+        client = chromadb.PersistentClient(
             path=CHROMA_DIR,
             settings=ChromaSettings(anonymized_telemetry=False),
         )
-
-    def _get_collection(self):
-        """每次都新建客户端和集合连接，避免 'client has been closed' 错误"""
-        client = self._get_client()
         return client.get_or_create_collection(
             name=COLLECTION_NAME,
             metadata={"hnsw:space": "cosine"},
@@ -46,25 +51,20 @@ class EmbeddingService:
             return
 
         with self._lock:
-            embeddings = self.model.encode(chunks, normalize_embeddings=True, show_progress_bar=False)
+            embeddings = self.encode(chunks, normalize_embeddings=True, show_progress_bar=False)
             collection = self._get_collection()
-
             collection.add(
                 ids=[f"{doc_id}_{i}" for i in range(len(chunks))],
                 documents=chunks,
                 embeddings=embeddings.tolist(),
-                metadatas=[
-                    {"doc_id": doc_id, "chunk_index": i}
-                    for i in range(len(chunks))
-                ],
+                metadatas=[{"doc_id": doc_id, "chunk_index": i} for i in range(len(chunks))],
             )
 
     def search(self, query: str, top_k: int = 5) -> List[dict]:
         """搜索最相关的文字片段"""
         with self._lock:
-            query_vec = self.model.encode([query], normalize_embeddings=True, show_progress_bar=False)
+            query_vec = self.encode([query], normalize_embeddings=True, show_progress_bar=False)
             collection = self._get_collection()
-
             results = collection.query(
                 query_embeddings=query_vec.tolist(),
                 n_results=top_k,
@@ -84,7 +84,6 @@ class EmbeddingService:
                 "chunk_index": i,
                 "score": round(1 - dist, 4),
             })
-
         return search_results
 
     def delete_document(self, doc_id: str):
@@ -96,7 +95,6 @@ class EmbeddingService:
                 collection.delete(ids=existing["ids"])
 
     def count(self) -> int:
-        """统计存储了多少片段"""
         collection = self._get_collection()
         return collection.count()
 
