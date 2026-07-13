@@ -33,7 +33,7 @@ EMBEDDING_MODEL = str(DATA_DIR / "bge-small-zh" / "models" / "AI-ModelScope--bge
 EMBEDDING_DEVICE = "cpu"
 
 # ========== LLM 设置 (DeepSeek) ==========
-LLM_API_KEY = os.getenv("LLM_API_KEY", "sk-ccb2fb61b1a64fc69f570ab06ce6773a")
+LLM_API_KEY = os.getenv("LLM_API_KEY", "")
 LLM_API_BASE = os.getenv("LLM_API_BASE", "https://api.deepseek.com")
 LLM_MODEL = os.getenv("LLM_MODEL", "deepseek-chat")
 

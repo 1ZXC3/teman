@@ -1,112 +1,101 @@
 import time
 from typing import List
 from openai import OpenAI
+
 from app.core.config import LLM_API_KEY, LLM_API_BASE, LLM_MODEL
+from app.core.prompts import SYSTEM_PROMPT
+from app.core.logger import get_logger
 
+logger = get_logger(__name__)
 
-# 回答问题的提示词模板
-SYSTEM_PROMPT = """你是一个超棒的知识助手！像个耐心的老师一样回答用户的问题。
-
-📚 规则：
-1. 优先使用【参考资料】里的内容来回答
-2. 回答要简单易懂，就像给小学生解释一样
-3. 如果你用了某条资料，在回答后注明"📖 参考来源"
-4. 如果资料里找不到答案，诚实地说"这个问题我暂时还不会，可以上传包含这些知识的文档来教我哦！"
-5. 用可爱的语气回答，适当使用 emoji ✨"""
+MAX_RETRIES = 3
+RETRY_DELAY = 2  # seconds
 
 
 class LLMHandler:
-    """AI 大脑 - 根据找到的资料生成回答"""
+    """AI 大脑 - DeepSeek API 调用，支持自动重试"""
 
     @staticmethod
     def generate(question: str, sources: List[dict]) -> dict:
-        """
-        让 AI 根据资料回答问题
-        返回: {answer, model_used, tokens, latency_ms, error}
-        """
-        # 如果没有 API Key，用本地模式
-        if not LLM_API_KEY or LLM_API_KEY == "your-api-key-here":
+        """让 AI 根据资料回答问题，失败时自动重试"""
+        if not LLM_API_KEY:
             return LLMHandler._local_mode(question, sources)
 
-        # 构建上下文
-        context_parts = []
-        for i, src in enumerate(sources, 1):
-            context_parts.append(f"【资料{i}】\n{src['content']}")
+        context_parts = [f"【资料{i+1}】\n{src['content']}" for i, src in enumerate(sources)]
         context = "\n\n---\n\n".join(context_parts)
 
         messages = [
             {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": f"参考资料：\n\n{context}\n\n❓ 用户的问题：{question}"},
+            {"role": "user", "content": f"参考资料：\n\n{context}\n\n问题：{question}"},
         ]
 
-        try:
-            client = OpenAI(api_key=LLM_API_KEY, base_url=LLM_API_BASE)
-            start = time.time()
+        last_error = None
+        for attempt in range(1, MAX_RETRIES + 1):
+            try:
+                client = OpenAI(api_key=LLM_API_KEY, base_url=LLM_API_BASE)
+                start = time.time()
 
-            response = client.chat.completions.create(
-                model=LLM_MODEL,
-                messages=messages,
-                temperature=0.5,
-                max_tokens=1000,
-                timeout=30,
-            )
+                response = client.chat.completions.create(
+                    model=LLM_MODEL,
+                    messages=messages,
+                    temperature=0.5,
+                    max_tokens=1000,
+                    timeout=30,
+                )
 
-            latency = round((time.time() - start) * 1000, 0)
-            usage = response.usage
+                latency = round((time.time() - start) * 1000, 0)
+                usage = response.usage
 
-            return {
-                "answer": response.choices[0].message.content,
-                "model_used": LLM_MODEL,
-                "prompt_tokens": usage.prompt_tokens if usage else 0,
-                "completion_tokens": usage.completion_tokens if usage else 0,
-                "latency_ms": latency,
-                "error": None,
-            }
+                return {
+                    "answer": response.choices[0].message.content,
+                    "model_used": LLM_MODEL,
+                    "prompt_tokens": usage.prompt_tokens if usage else 0,
+                    "completion_tokens": usage.completion_tokens if usage else 0,
+                    "latency_ms": latency,
+                    "error": None,
+                }
 
-        except Exception as e:
-            return {
-                "answer": f"😢 抱歉，AI 服务出了点问题：{e}",
-                "model_used": "error",
-                "prompt_tokens": 0,
-                "completion_tokens": 0,
-                "latency_ms": 0,
-                "error": str(e),
-            }
+            except Exception as e:
+                last_error = str(e)
+                logger.warning(f"LLM 调用失败 (第{attempt}/{MAX_RETRIES}次): {e}")
+                if attempt < MAX_RETRIES:
+                    time.sleep(RETRY_DELAY * attempt)
+
+        logger.error(f"LLM 调用全部失败: {last_error}")
+        return {
+            "answer": f"AI服务暂时不可用，请稍后再试。({last_error[:80]})",
+            "model_used": "error",
+            "prompt_tokens": 0,
+            "completion_tokens": 0,
+            "latency_ms": 0,
+            "error": last_error,
+        }
 
     @staticmethod
     def _local_mode(question: str, sources: List[dict]) -> dict:
-        """
-        离线模式 - 不需要 API Key
-        直接用搜索到的资料拼接回答
-        """
+        """离线模式 - 整理搜索到的资料"""
         if not sources:
             return {
-                "answer": "❓ 我在知识库里没有找到相关信息。\n\n💡 建议：先上传一些文档，我就可以帮你找答案啦！",
-                "model_used": "本地搜索模式",
+                "answer": "知识库中没有找到相关信息。请先上传一些文档。",
+                "model_used": "本地搜索",
                 "prompt_tokens": 0,
                 "completion_tokens": 0,
                 "latency_ms": 0,
                 "error": None,
             }
 
-        # 把搜到的资料整理成回答
-        answer = f"🔍 我找到了 {len(sources)} 条相关资料，整理如下：\n\n"
+        answer = f"找到 {len(sources)} 条相关资料：\n\n"
         answer += "─" * 40 + "\n\n"
-
         for i, src in enumerate(sources, 1):
-            match_percent = int(src.get("score", 0) * 100)
-            stars = "⭐" * min(5, max(1, match_percent // 20))
-            answer += f"📄 **第{i}条** (相关度: {stars} {match_percent}%)\n\n"
-            answer += f"{src['content'][:400]}\n\n"
+            match_pct = int(src.get("score", 0) * 100)
+            stars = "=" * min(5, max(1, match_pct // 20))
+            answer += f"第{i}条 (相关度: {stars} {match_pct}%)\n{src['content'][:400]}\n\n"
             answer += "─" * 40 + "\n\n"
 
-        answer += (
-            "\n💡 **提示**: 这是本地搜索模式的结果。\n"
-            "如果要获得 AI 总结后的答案，请在 `config.py` 中填入你的 API Key~"
-        )
+        answer += "提示: 设置 LLM_API_KEY 可使用 DeepSeek AI 智能回答。"
         return {
             "answer": answer,
-            "model_used": "本地搜索模式",
+            "model_used": "本地搜索",
             "prompt_tokens": 0,
             "completion_tokens": 0,
             "latency_ms": 0,

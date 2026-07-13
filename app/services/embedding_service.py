@@ -7,47 +7,56 @@ from app.core.config import CHROMA_DIR, COLLECTION_NAME, EMBEDDING_MODEL, EMBEDD
 
 
 class EmbeddingService:
-    """向量服务 - 使用本地模型，无需联网"""
+    """向量服务 - 使用本地模型"""
 
     def __init__(self):
         self._model = None
-        self._lock = threading.RLock()  # 可重入锁，防止死锁
+        self._client = None
+        self._collection = None
+        self._lock = threading.RLock()
 
     def preload(self):
-        """启动时加载本地模型"""
+        """启动时初始化模型和 ChromaDB 连接"""
         print("正在加载AI模型...")
         self._get_model()
-        print("模型就绪!")
+        print("正在初始化向量库...")
+        self._get_collection()
+        print("就绪!")
 
     def _get_model(self):
         if self._model is None:
-            self._model = SentenceTransformer(
-                EMBEDDING_MODEL,
-                device=EMBEDDING_DEVICE,
-                local_files_only=True,  # 只用本地文件，不联网
-            )
+            try:
+                self._model = SentenceTransformer(
+                    EMBEDDING_MODEL, device=EMBEDDING_DEVICE, local_files_only=True
+                )
+            except Exception:
+                print("本地模型未找到，从网络下载...")
+                self._model = SentenceTransformer(
+                    "BAAI/bge-small-zh-v1.5", device=EMBEDDING_DEVICE
+                )
         return self._model
+
+    def _get_collection(self):
+        """单例 ChromaDB 客户端和集合"""
+        if self._client is None:
+            self._client = chromadb.PersistentClient(
+                path=CHROMA_DIR,
+                settings=ChromaSettings(anonymized_telemetry=False),
+            )
+        if self._collection is None:
+            self._collection = self._client.get_or_create_collection(
+                name=COLLECTION_NAME,
+                metadata={"hnsw:space": "cosine"},
+            )
+        return self._collection
 
     def encode(self, texts, **kwargs):
         with self._lock:
             return self._get_model().encode(texts, **kwargs)
 
-    def _get_collection(self):
-        """每次新建客户端连接"""
-        client = chromadb.PersistentClient(
-            path=CHROMA_DIR,
-            settings=ChromaSettings(anonymized_telemetry=False),
-        )
-        return client.get_or_create_collection(
-            name=COLLECTION_NAME,
-            metadata={"hnsw:space": "cosine"},
-        )
-
     def add_document(self, doc_id: str, chunks: List[str]):
-        """把文档的每个块加入向量库"""
         if not chunks:
             return
-
         with self._lock:
             embeddings = self.encode(chunks, normalize_embeddings=True, show_progress_bar=False)
             collection = self._get_collection()
@@ -59,7 +68,6 @@ class EmbeddingService:
             )
 
     def search(self, query: str, top_k: int = 5) -> List[dict]:
-        """搜索最相关的文字片段"""
         with self._lock:
             query_vec = self.encode([query], normalize_embeddings=True, show_progress_bar=False)
             collection = self._get_collection()
@@ -85,7 +93,6 @@ class EmbeddingService:
         return search_results
 
     def delete_document(self, doc_id: str):
-        """删除文档的所有块"""
         with self._lock:
             collection = self._get_collection()
             existing = collection.get(where={"doc_id": doc_id})
@@ -93,8 +100,7 @@ class EmbeddingService:
                 collection.delete(ids=existing["ids"])
 
     def count(self) -> int:
-        collection = self._get_collection()
-        return collection.count()
+        return self._get_collection().count()
 
 
 embedding_service = EmbeddingService()
