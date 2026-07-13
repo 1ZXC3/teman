@@ -20,7 +20,8 @@ class Retriever:
     def _rebuild_keyword_index(self):
         """从 ChromaDB 加载所有块，构建关键词索引"""
         try:
-            all_data = embedding_service.collection.get(include=["documents", "metadatas"])
+            collection = embedding_service._get_collection()
+            all_data = collection.get(include=["documents", "metadatas"])
             self._all_chunks = all_data.get("documents", [])
             self._all_doc_ids = [
                 m.get("doc_id", "") for m in all_data.get("metadatas", [])
