@@ -2,17 +2,15 @@
 ══════════════════════════════════════════════════
   📚 我的知识助手 - 一键启动
 ══════════════════════════════════════════════════
-
-使用方法:
-  1. 双击这个文件 (或在终端输入: python start.py)
-  2. 等待提示 "启动成功"
-  3. 打开浏览器访问 http://localhost:8000
-
-══════════════════════════════════════════════════
 """
-import subprocess
-import sys
 import os
+import sys
+
+# ⚠️ 必须在导入任何AI库之前设置！解决国内无法访问HuggingFace的问题
+os.environ["HF_ENDPOINT"] = "https://hf-mirror.com"
+os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "0"
+
+import subprocess
 import time
 
 # 切换到项目目录

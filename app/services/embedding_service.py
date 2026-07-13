@@ -1,4 +1,3 @@
-import os
 import threading
 from typing import List
 import chromadb
@@ -6,28 +5,27 @@ from chromadb.config import Settings as ChromaSettings
 from sentence_transformers import SentenceTransformer
 from app.core.config import CHROMA_DIR, COLLECTION_NAME, EMBEDDING_MODEL, EMBEDDING_DEVICE
 
-# 国内加速：使用 HF 镜像站
-if not os.getenv("HF_ENDPOINT"):
-    os.environ["HF_ENDPOINT"] = "https://hf-mirror.com"
-
 
 class EmbeddingService:
-    """向量服务 - 把文字变成数字指纹，方便搜索"""
+    """向量服务 - 使用本地模型，无需联网"""
 
     def __init__(self):
         self._model = None
-        self._client = None
         self._lock = threading.Lock()
 
     def preload(self):
-        """启动时预加载模型，避免首次请求卡住"""
-        print("正在下载/加载AI模型... (首次约1-2分钟)")
+        """启动时加载本地模型"""
+        print("正在加载AI模型...")
         self._get_model()
         print("模型就绪!")
 
     def _get_model(self):
         if self._model is None:
-            self._model = SentenceTransformer(EMBEDDING_MODEL, device=EMBEDDING_DEVICE)
+            self._model = SentenceTransformer(
+                EMBEDDING_MODEL,
+                device=EMBEDDING_DEVICE,
+                local_files_only=True,  # 只用本地文件，不联网
+            )
         return self._model
 
     def encode(self, texts, **kwargs):

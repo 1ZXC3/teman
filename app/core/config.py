@@ -28,8 +28,8 @@ CHROMA_DIR = str(DATA_DIR / "chroma_db")
 COLLECTION_NAME = "knowledge_chunks"
 
 # ========== Embedding 模型 ==========
-# 首次使用会自动下载，之后缓存到本地
-EMBEDDING_MODEL = "BAAI/bge-small-zh-v1.5"
+# 已从 ModelScope 下载到本地，无需联网
+EMBEDDING_MODEL = str(DATA_DIR / "bge-small-zh" / "models" / "AI-ModelScope--bge-small-zh-v1.5" / "snapshots" / "master")
 EMBEDDING_DEVICE = "cpu"
 
 # ========== LLM 设置 (DeepSeek) ==========
