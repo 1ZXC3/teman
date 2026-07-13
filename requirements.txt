@@ -1,0 +1,22 @@
+# ========== Web 框架 ==========
+fastapi>=0.110.0
+uvicorn[standard]>=0.29.0
+python-multipart>=0.0.9
+aiofiles>=23.0.0
+
+# ========== 数据库 (MySQL) ==========
+sqlalchemy>=2.0.25
+pymysql>=1.1.0
+
+# ========== 向量搜索 ==========
+chromadb>=0.4.22
+sentence-transformers>=2.7.0
+
+# ========== 文档解析 ==========
+PyMuPDF>=1.24.0
+pdfminer.six>=20231228
+python-docx>=1.1.0
+
+# ========== AI 对话 (可选) ==========
+openai>=1.30.0
+tiktoken>=0.7.0

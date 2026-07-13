@@ -1,0 +1,13 @@
+# RAG-Knowledge-Base
+
+__pycache__/
+*.pyc
+*.pyo
+.env
+uploads/
+models_cache/
+data/
+*.db
+*.sqlite3
+.milvus/
+.DS_Store
