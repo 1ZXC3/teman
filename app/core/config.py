@@ -32,10 +32,10 @@ COLLECTION_NAME = "knowledge_chunks"
 EMBEDDING_MODEL = "BAAI/bge-small-zh-v1.5"
 EMBEDDING_DEVICE = "cpu"
 
-# ========== LLM 设置 ==========
-LLM_API_KEY = os.getenv("LLM_API_KEY", "")
-LLM_API_BASE = os.getenv("LLM_API_BASE", "https://api.openai.com/v1")
-LLM_MODEL = os.getenv("LLM_MODEL", "gpt-4o")
+# ========== LLM 设置 (DeepSeek) ==========
+LLM_API_KEY = os.getenv("LLM_API_KEY", "sk-ccb2fb61b1a64fc69f570ab06ce6773a")
+LLM_API_BASE = os.getenv("LLM_API_BASE", "https://api.deepseek.com")
+LLM_MODEL = os.getenv("LLM_MODEL", "deepseek-chat")
 
 # ========== 文档处理 ==========
 CHUNK_SIZE = 500          # 每块最多500字
