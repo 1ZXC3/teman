@@ -11,7 +11,7 @@ class EmbeddingService:
 
     def __init__(self):
         self._model = None
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()  # 可重入锁，防止死锁
 
     def preload(self):
         """启动时加载本地模型"""
